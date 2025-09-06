@@ -96,7 +96,8 @@ export default function Banners() {
     const positions: Record<string, string> = {
       "homepage-hero": "Homepage Hero",
       "category-banner": "Category Banner",
-      "promotional": "Promotional"
+      "promotional": "Promotional",
+      "video-banner": "Video Banner"
     };
     return positions[position] || position;
   };
@@ -165,7 +166,7 @@ export default function Banners() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Image</TableHead>
+                    <TableHead>Media</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Slogan</TableHead>
                     <TableHead>Position</TableHead>
@@ -178,7 +179,14 @@ export default function Banners() {
                   {filteredBanners.map((banner) => (
                     <TableRow key={banner.id}>
                       <TableCell>
-                        {banner.image && (
+                        {banner.videoUrl ? (
+                          <div className="w-16 h-12 bg-gray-100 rounded flex items-center justify-center">
+                            <div className="text-xs text-gray-600 text-center">
+                              <div className="font-medium">VIDEO</div>
+                              <div className="text-[10px]">Banner</div>
+                            </div>
+                          </div>
+                        ) : banner.image ? (
                           <img
                             src={banner.image}
                             alt={banner.title || "Banner"}
@@ -187,6 +195,10 @@ export default function Banners() {
                               (e.target as HTMLImageElement).src = "https://via.placeholder.com/64x48?text=No+Image";
                             }}
                           />
+                        ) : (
+                          <div className="w-16 h-12 bg-gray-100 rounded flex items-center justify-center">
+                            <div className="text-xs text-gray-600">No Media</div>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>

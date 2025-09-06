@@ -158,7 +158,33 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
       formDataToSend.append('title', formData.title);
       formDataToSend.append('ctaHref', formData.ctaHref);
       formDataToSend.append('ctaLabel', formData.ctaLabel);
-      formDataToSend.append('position', formData.position);
+      
+      // For video banners, always set position to 'video-banner' and check for existing video banners
+      if (formData.bannerType === "video") {
+        formDataToSend.append('position', 'video-banner');
+        
+        // Check if there's already an active video banner (only allow one video banner)
+        if (!banner) {
+          try {
+            const existingBanners = await adminApiClient.listBanners();
+            if (existingBanners.ok && existingBanners.data) {
+              const hasActiveVideo = existingBanners.data.banners?.some((b: any) => 
+                b.videoUrl && b.active && b.position === 'video-banner'
+              );
+              if (hasActiveVideo) {
+                toast.error("Only one video banner can be active at a time. Please deactivate the existing video banner first.");
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (error) {
+            console.error("Error checking existing video banners:", error);
+          }
+        }
+      } else {
+        formDataToSend.append('position', formData.position);
+      }
+      
       formDataToSend.append('active', formData.active.toString());
       formDataToSend.append('order', formData.order.toString());
       
@@ -426,19 +452,31 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
             )}
           </div>
 
-          <div>
-            <Label htmlFor="position">Position</Label>
-            <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select position" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
-                <SelectItem value="category-banner">Category Banner</SelectItem>
-                <SelectItem value="promotional">Promotional</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {formData.bannerType === "image" && (
+            <div>
+              <Label htmlFor="position">Position</Label>
+              <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
+                  <SelectItem value="category-banner">Category Banner</SelectItem>
+                  <SelectItem value="promotional">Promotional</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {formData.bannerType === "video" && (
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Video Banner Settings</h4>
+              <p className="text-sm text-blue-700">
+                Video banners are automatically displayed in the Video Section on the homepage. 
+                Only one video banner can be active at a time.
+              </p>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="order">Display Order</Label>
