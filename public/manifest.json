@@ -1,0 +1,16 @@
+{
+  "name": "Hichhki Admin Dashboard",
+  "short_name": "Hichhki Admin",
+  "description": "Admin dashboard for Hichhki e-commerce platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#B8956A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
