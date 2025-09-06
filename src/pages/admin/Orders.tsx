@@ -68,6 +68,14 @@ export default function Orders() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
+  // Stats state
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    pendingOrders: 0,
+    shippedOrders: 0,
+    totalRevenue: 0
+  });
+
   // Modal states
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -85,36 +93,60 @@ export default function Orders() {
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
+  const fetchStats = async () => {
+    try {
+      // Fetch all orders for stats calculation (no pagination)
+      const response = await adminApiClient.listOrders({ limit: 1000 }); // Get a large number to get all orders
+      
+      if (response.ok && response.data) {
+        const allOrders = response.data.orders;
+        
+        // Calculate stats
+        const totalOrders = allOrders.length;
+        const pendingOrders = allOrders.filter((o: Order) => 
+          o.status === "pending" || o.status === "processing"
+        ).length;
+        const shippedOrders = allOrders.filter((o: Order) => 
+          o.status === "shipped" || o.status === "out_for_delivery"
+        ).length;
+        const totalRevenue = allOrders.reduce((sum: number, o: Order) => {
+          if (o.status === 'delivered' || o.status === 'confirmed') {
+            return sum + (o.amounts?.total || 0);
+          }
+          return sum;
+        }, 0);
+
+        setStats({
+          totalOrders,
+          pendingOrders,
+          shippedOrders,
+          totalRevenue
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
+    }
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     setError(null);
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
       // Build query parameters
-      const params = new URLSearchParams();
-      if (currentPage) params.append('page', currentPage.toString());
-      if (ordersPerPage) params.append('limit', ordersPerPage.toString());
-      if (searchTerm) params.append('search', searchTerm);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
+      const params: Record<string, string | number> = {};
+      if (currentPage) params.page = currentPage;
+      if (ordersPerPage) params.limit = ordersPerPage;
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (paymentStatusFilter !== 'all') params.paymentStatus = paymentStatusFilter;
       
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await adminApiClient.listOrders(params);
       
-      const data = await response.json();
-      
-      if (data.ok && data.data) {
-        setOrders(data.data.orders);
-        setTotalOrders(data.data.total);
+      if (response.ok && response.data) {
+        setOrders(response.data.orders);
+        setTotalOrders(response.data.total);
       } else {
-        setError(data.error?.message || "Failed to load orders");
+        setError(response.error?.message || "Failed to load orders");
         toast.error("Failed to load orders");
       }
     } catch (err: any) {
@@ -127,7 +159,8 @@ export default function Orders() {
 
   useEffect(() => {
     fetchOrders();
-  }, [currentPage, searchTerm, statusFilter]);
+    fetchStats(); // Fetch stats on component mount and when filters change
+  }, [currentPage, searchTerm, statusFilter, paymentStatusFilter]);
 
   const getUserName = (userId: string | { id: string; name: string; email: string }) => {
     if (typeof userId === 'string') {
@@ -267,32 +300,19 @@ export default function Orders() {
     setUpdateError(null);
 
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders/${getOrderId(selectedOrder)}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          status: newStatus,
-          notes: adminNotes || undefined
-        })
+      const response = await adminApiClient.updateOrder(getOrderId(selectedOrder), { 
+        status: newStatus as any,
+        adminNotes: adminNotes ? [{ note: adminNotes, createdAt: new Date().toISOString(), createdBy: user?.name || 'Admin' }] : undefined
       });
-      
-      const data = await response.json();
 
-      if (data.ok) {
+      if (response.ok) {
         toast.success("Order status updated successfully");
         await fetchOrders();
+        await fetchStats();
         setIsUpdateModalOpen(false);
         setAdminNotes("");
       } else {
-        setUpdateError(data.error?.message || "Failed to update order status");
+        setUpdateError(response.error?.message || "Failed to update order status");
         toast.error("Failed to update order status");
       }
     } catch (err: any) {
@@ -309,32 +329,18 @@ export default function Orders() {
     setUpdateError(null);
 
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders/${getOrderId(selectedOrder)}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          payment: { status: newPaymentStatus },
-          notes: adminNotes || undefined
-        })
+      const response = await adminApiClient.updateOrder(getOrderId(selectedOrder), { 
+        payment: { ...selectedOrder.payment, status: newPaymentStatus as any },
+        adminNotes: adminNotes ? [{ note: adminNotes, createdAt: new Date().toISOString(), createdBy: user?.name || 'Admin' }] : undefined
       });
-      
-      const data = await response.json();
 
-      if (data.ok) {
+      if (response.ok) {
         toast.success("Payment status updated successfully");
         await fetchOrders();
         setIsPaymentModalOpen(false);
         setAdminNotes("");
       } else {
-        setUpdateError(data.error?.message || "Failed to update payment status");
+        setUpdateError(response.error?.message || "Failed to update payment status");
         toast.error("Failed to update payment status");
       }
     } catch (err: any) {
@@ -351,32 +357,22 @@ export default function Orders() {
     setUpdateError(null);
 
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders/${getOrderId(selectedOrder)}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
+      const response = await adminApiClient.updateOrder(getOrderId(selectedOrder), { 
+        tracking: {
+          ...trackingInfo,
+          estimatedDelivery: '',
+          actualDelivery: ''
         },
-        body: JSON.stringify({ 
-          tracking: trackingInfo,
-          notes: adminNotes || undefined
-        })
+        adminNotes: adminNotes ? [{ note: adminNotes, createdAt: new Date().toISOString(), createdBy: user?.name || 'Admin' }] : undefined
       });
-      
-      const data = await response.json();
 
-      if (data.ok) {
+      if (response.ok) {
         toast.success("Tracking information updated successfully");
         await fetchOrders();
         setIsTrackingModalOpen(false);
         setAdminNotes("");
       } else {
-        setUpdateError(data.error?.message || "Failed to update tracking information");
+        setUpdateError(response.error?.message || "Failed to update tracking information");
         toast.error("Failed to update tracking information");
       }
     } catch (err: any) {
@@ -393,32 +389,26 @@ export default function Orders() {
     setUpdateError(null);
 
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders/${getOrderId(selectedOrder)}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
+      const response = await adminApiClient.updateOrder(getOrderId(selectedOrder), { 
+        status: 'cancelled',
+        cancellation: {
+          reason: cancelReason,
+          requestedAt: new Date().toISOString(),
+          processedAt: new Date().toISOString(),
+          processedBy: user?.name || 'Admin',
+          refundAmount: 0,
+          refundMethod: 'original_payment_method'
         },
-        body: JSON.stringify({ 
-          cancellation: { reason: cancelReason },
-          notes: adminNotes || undefined
-        })
+        adminNotes: adminNotes ? [{ note: adminNotes, createdAt: new Date().toISOString(), createdBy: user?.name || 'Admin' }] : undefined
       });
-      
-      const data = await response.json();
 
-      if (data.ok) {
+      if (response.ok) {
         toast.success("Order cancelled successfully");
         await fetchOrders();
         setIsCancelModalOpen(false);
         setAdminNotes("");
       } else {
-        setUpdateError(data.error?.message || "Failed to cancel order");
+        setUpdateError(response.error?.message || "Failed to cancel order");
         toast.error("Failed to cancel order");
       }
     } catch (err: any) {
@@ -435,34 +425,27 @@ export default function Orders() {
     setUpdateError(null);
 
     try {
-      const adminToken = localStorage.getItem("adminToken");
-      if (!adminToken) {
-        throw new Error("No admin token found");
-      }
-      
-      const response = await fetch(`http://localhost:3000/api/v1/admin/orders/${getOrderId(selectedOrder)}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
+      const response = await adminApiClient.updateOrder(getOrderId(selectedOrder), { 
+        status: 'returned',
+        cancellation: {
+          reason: returnReason,
+          requestedAt: new Date().toISOString(),
+          processedAt: new Date().toISOString(),
+          processedBy: user?.name || 'Admin',
+          refundAmount: 0,
+          refundMethod: 'original_payment_method'
         },
-        body: JSON.stringify({ 
-          status: 'returned',
-          cancellation: { reason: returnReason },
-          notes: adminNotes || undefined
-        })
+        adminNotes: adminNotes ? [{ note: adminNotes, createdAt: new Date().toISOString(), createdBy: user?.name || 'Admin' }] : undefined
       });
-      
-      const data = await response.json();
 
-      if (data.ok) {
+      if (response.ok) {
         toast.success("Order returned successfully");
         await fetchOrders();
         setIsReturnModalOpen(false);
         setReturnReason("");
         setAdminNotes("");
       } else {
-        setUpdateError(data.error?.message || "Failed to return order");
+        setUpdateError(response.error?.message || "Failed to return order");
         toast.error("Failed to return order");
       }
     } catch (err: any) {
@@ -489,7 +472,7 @@ export default function Orders() {
               <Calendar className="h-4 w-4" />
               <span>Last updated: {formatDate(new Date())}</span>
             </div>
-            <Button variant="ghost" size="sm" onClick={fetchOrders} className="text-[#B8956A] hover:text-[#B8956A]/80">
+            <Button variant="ghost" size="sm" onClick={() => { fetchOrders(); fetchStats(); }} className="text-[#B8956A] hover:text-[#B8956A]/80">
               <RefreshCw className="h-4 w-4 mr-1" /> Refresh
             </Button>
           </div>
@@ -502,7 +485,7 @@ export default function Orders() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalOrders}</div>
+              <div className="text-2xl font-bold">{stats.totalOrders}</div>
             </CardContent>
           </Card>
           <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -510,9 +493,7 @@ export default function Orders() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {orders.filter((o) => o.status === "pending" || o.status === "processing").length}
-              </div>
+              <div className="text-2xl font-bold">{stats.pendingOrders}</div>
             </CardContent>
           </Card>
           <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -520,9 +501,7 @@ export default function Orders() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Shipped</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {orders.filter((o) => o.status === "shipped" || o.status === "out_for_delivery").length}
-              </div>
+              <div className="text-2xl font-bold">{stats.shippedOrders}</div>
             </CardContent>
           </Card>
           <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -531,12 +510,7 @@ export default function Orders() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ₹{
-                  orders.reduce((sum, o) => {
-                    if (o.status === 'delivered' || o.status === 'confirmed') return sum + (o.amounts?.total || 0);
-                    return sum;
-                  }, 0).toFixed(2)
-                }
+                ₹{stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </CardContent>
           </Card>
