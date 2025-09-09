@@ -1,5 +1,5 @@
-// const ADMIN_API_BASE_URL =  'http://localhost:3000/api/v1/admin';
-const ADMIN_API_BASE_URL =  'https://hichhki.onrender.com/api/v1/admin';
+const ADMIN_API_BASE_URL =  'http://localhost:3000/api/v1/admin';
+// const ADMIN_API_BASE_URL =  'https://hichhki.onrender.com/api/v1/admin';
 // Export backend origin (without the /api/v1/admin suffix) so other modules can reuse it
 export const BACKEND_ORIGIN = ADMIN_API_BASE_URL.replace(/\/$/, '').replace(/\/api\/v1\/admin$/, '');
 
