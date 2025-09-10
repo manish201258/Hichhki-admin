@@ -12,7 +12,7 @@ import { Plus, Edit, Loader2 } from "lucide-react";
 import { ImageInput } from "./ImageInput";
 
 interface BannerFormProps {
-  banner?: Banner;  
+  banner?: Banner;
   onSuccess?: () => void;
   trigger?: React.ReactNode;
 }
@@ -71,12 +71,12 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    // Check if we have either an image URL or a file to upload
-    const hasImageUrl = formData.image.trim() && isValidUrl(formData.image);
-    const hasImageFile = imageFile !== null;
-    
-    if (!hasImageUrl && !hasImageFile) {
-      newErrors.image = "Image is required - either upload a file or provide a URL";
+      // Check if we have either an image URL or a file to upload
+      const hasImageUrl = formData.image.trim() && isValidUrl(formData.image);
+      const hasImageFile = imageFile !== null;
+      
+      if (!hasImageUrl && !hasImageFile) {
+        newErrors.image = "Image is required - either upload a file or provide a URL";
     }
     
     if (formData.ctaHref && !isValidUrl(formData.ctaHref) && !formData.ctaHref.startsWith('/')) {
@@ -336,7 +336,7 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
             </div>
 
 
-          </div>
+            </div>
           <div>
             <Label htmlFor="slogan">Slogan Text</Label>
             <Input
@@ -381,19 +381,19 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
             )}
           </div>
 
-          <div>
-            <Label htmlFor="position">Position</Label>
-            <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select position" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
-                <SelectItem value="category-banner">Category Banner</SelectItem>
-                <SelectItem value="promotional">Promotional</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div>
+              <Label htmlFor="position">Position</Label>
+              <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
+                  <SelectItem value="category-banner">Category Banner</SelectItem>
+                  <SelectItem value="promotional">Promotional</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
           <div>
             <Label htmlFor="order">Display Order</Label>
