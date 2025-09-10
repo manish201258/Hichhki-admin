@@ -20,7 +20,7 @@ import {
   Loader2,
   Edit
 } from "lucide-react";
-import { adminApiClient, Banner } from "@/lib/adminApi";
+import { adminApiClient, Banner, BACKEND_ORIGIN } from "@/lib/adminApi";
 import { toast } from "sonner";
 
 // Helper function to safely format dates
@@ -100,6 +100,15 @@ export default function Banners() {
       "video-banner": "Video Banner"
     };
     return positions[position] || position;
+  };
+
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath || imagePath.trim() === '') return 'https://via.placeholder.com/64x48?text=No+Image';
+    if (imagePath.startsWith('http')) return imagePath;
+    if (imagePath.startsWith('/uploads/')) return `${BACKEND_ORIGIN}${imagePath}`;
+    if (imagePath.startsWith('blob:')) return imagePath;
+    if (imagePath.startsWith('/')) return imagePath;
+    return imagePath;
   };
 
   if (loading) {
@@ -188,7 +197,7 @@ export default function Banners() {
                           </div>
                         ) : banner.image ? (
                           <img
-                            src={banner.image}
+                            src={getImageUrl(banner.image)}
                             alt={banner.title || "Banner"}
                             className="w-16 h-12 object-cover rounded"
                             onError={(e) => {

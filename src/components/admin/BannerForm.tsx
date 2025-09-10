@@ -12,7 +12,7 @@ import { Plus, Edit, Loader2 } from "lucide-react";
 import { ImageInput } from "./ImageInput";
 
 interface BannerFormProps {
-  banner?: Banner;
+  banner?: Banner;  
   onSuccess?: () => void;
   trigger?: React.ReactNode;
 }
@@ -23,8 +23,6 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     image: "",
-    videoUrl: "",
-    bannerType: "image", // "image" or "video"
     slogan: "हर धागा, हर रंग - सिर्फ HICHHKI के संग",
     title: "HICHHKI",
     ctaHref: "/all-products",
@@ -41,8 +39,6 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
     if (banner) {
       setFormData({
         image: banner.image || "",
-        videoUrl: banner.videoUrl || "",
-        bannerType: banner.videoUrl ? "video" : "image",
         slogan: banner.slogan || "हर धागा, हर रंग - सिर्फ HICHHKI के संग",
         title: banner.title || "HICHHKI",
         ctaHref: banner.ctaHref || "/all-products",
@@ -58,8 +54,6 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
       // Reset form for new banners
       setFormData({
         image: "",
-        videoUrl: "",
-        bannerType: "image",
         slogan: "हर धागा, हर रंग - सिर्फ HICHHKI के संग",
         title: "HICHHKI",
         ctaHref: "/all-products",
@@ -77,20 +71,12 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    if (formData.bannerType === "image") {
-      // Check if we have either an image URL or a file to upload
-      const hasImageUrl = formData.image.trim() && isValidUrl(formData.image);
-      const hasImageFile = imageFile !== null;
-      
-      if (!hasImageUrl && !hasImageFile) {
-        newErrors.image = "Image is required - either upload a file or provide a URL";
-      }
-    } else if (formData.bannerType === "video") {
-      if (!formData.videoUrl.trim()) {
-        newErrors.videoUrl = "Video URL is required";
-      } else if (!isValidUrl(formData.videoUrl)) {
-        newErrors.videoUrl = "Please enter a valid video URL";
-      }
+    // Check if we have either an image URL or a file to upload
+    const hasImageUrl = formData.image.trim() && isValidUrl(formData.image);
+    const hasImageFile = imageFile !== null;
+    
+    if (!hasImageUrl && !hasImageFile) {
+      newErrors.image = "Image is required - either upload a file or provide a URL";
     }
     
     if (formData.ctaHref && !isValidUrl(formData.ctaHref) && !formData.ctaHref.startsWith('/')) {
@@ -151,60 +137,36 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
     setErrors({});
 
     try {
-      const formDataToSend = new FormData();
-      
-      // Add basic fields
-      formDataToSend.append('slogan', formData.slogan);
-      formDataToSend.append('title', formData.title);
-      formDataToSend.append('ctaHref', formData.ctaHref);
-      formDataToSend.append('ctaLabel', formData.ctaLabel);
-      
-      // For video banners, always set position to 'video-banner' and check for existing video banners
-      if (formData.bannerType === "video") {
-        formDataToSend.append('position', 'video-banner');
-        
-        // Check if there's already an active video banner (only allow one video banner)
-        if (!banner) {
-          try {
-            const existingBanners = await adminApiClient.listBanners();
-            if (existingBanners.ok && existingBanners.data) {
-              const hasActiveVideo = existingBanners.data.banners?.some((b: any) => 
-                b.videoUrl && b.active && b.position === 'video-banner'
-              );
-              if (hasActiveVideo) {
-                toast.error("Only one video banner can be active at a time. Please deactivate the existing video banner first.");
-                setLoading(false);
-                return;
-              }
-            }
-          } catch (error) {
-            console.error("Error checking existing video banners:", error);
-          }
-        }
-      } else {
-        formDataToSend.append('position', formData.position);
+      // Prepare image value: upload file if present, otherwise use URL
+      let imageValue = formData.image;
+      const hasNewImageUrl = !!(formData.image && inputType === "url");
+      const hasNewImageFile = !!imageFile;
+      const hasNewImage = hasNewImageUrl || hasNewImageFile;
+      if (hasNewImageFile) {
+        const uploadRes = await uploadImage(imageFile);
+        imageValue = uploadRes;
       }
       
-      formDataToSend.append('active', formData.active.toString());
-      formDataToSend.append('order', formData.order.toString());
-      
-      if (formData.videoUrl) {
-        formDataToSend.append('videoUrl', formData.videoUrl);
-      }
-      
-      // Handle image upload
-      if (imageFile) {
-        formDataToSend.append('images', imageFile);
-      } else if (formData.image) {
-        formDataToSend.append('image', formData.image);
-      } else if (banner && !hasExistingImage) {
-        // If updating and no image provided, send empty string to remove image
-        formDataToSend.append('image', '');
-      }
+      // Build JSON payload for banner APIs
+      const basePayload = {
+        slogan: formData.slogan,
+        title: formData.title,
+        ctaHref: formData.ctaHref,
+        ctaLabel: formData.ctaLabel,
+        position: formData.position,
+        active: formData.active,
+        order: formData.order,
+      } as const;
       
       if (banner) {
         // Update existing banner
-        const response = await adminApiClient.updateBanner(banner.id, formDataToSend);
+        const updatePayload: any = { ...basePayload };
+        // Only send image on update if a new image is provided,
+        // or if there was no existing image previously
+        if (hasNewImage || !hasExistingImage) {
+          updatePayload.image = imageValue || '';
+        }
+        const response = await adminApiClient.updateBanner(banner.id, updatePayload);
         if (response.ok) {
           toast.success("Banner updated successfully!");
           setOpen(false);
@@ -214,7 +176,8 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
         }
       } else {
         // Create new banner
-        const response = await adminApiClient.createBanner(formDataToSend);
+        const createPayload = { ...basePayload, image: imageValue } as any;
+        const response = await adminApiClient.createBanner(createPayload);
         if (response.ok) {
           toast.success("Banner created successfully!");
           setOpen(false);
@@ -222,8 +185,6 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
           // Reset form
           setFormData({
             image: "",
-            videoUrl: "",
-            bannerType: "image",
             slogan: "हर धागा, हर रंग - सिर्फ HICHHKI के संग",
             title: "HICHHKI",
             ctaHref: "/all-products",
@@ -272,24 +233,11 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
           <div className="bg-blue-50 p-4 rounded-lg">
             <h3 className="font-medium text-blue-900 mb-2">Hero Banner Settings</h3>
             <p className="text-sm text-blue-700">
-              You can update the banner image/video, slogan, title, button text, and target link.
+              You can update the banner image, slogan, title, button text, and target link.
             </p>
           </div>
 
           <div>
-            <Label htmlFor="bannerType">Banner Type</Label>
-            <Select value={formData.bannerType} onValueChange={(value) => handleInputChange("bannerType", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select banner type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="image">Image Banner</SelectItem>
-                <SelectItem value="video">Video Banner</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {formData.bannerType === "image" && (
             <div className="space-y-3">
               <Label>Banner Image *</Label>
               
@@ -386,28 +334,9 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
                 </div>
               )}
             </div>
-          )}
 
-          {formData.bannerType === "video" && (
-            <div>
-              <Label htmlFor="videoUrl">Video URL *</Label>
-              <Input
-                id="videoUrl"
-                value={formData.videoUrl}
-                onChange={(e) => handleInputChange("videoUrl", e.target.value)}
-                placeholder="https://example.com/video.mp4"
-                required
-                className={getFieldError("videoUrl") ? "border-red-500" : ""}
-              />
-              {getFieldError("videoUrl") && (
-                <p className="text-sm text-red-500 mt-1">{getFieldError("videoUrl")}</p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                Supported formats: MP4, WebM, OGG. For best performance, use MP4 format.
-              </p>
-            </div>
-          )}
 
+          </div>
           <div>
             <Label htmlFor="slogan">Slogan Text</Label>
             <Input
@@ -452,31 +381,19 @@ export function BannerForm({ banner, onSuccess, trigger }: BannerFormProps) {
             )}
           </div>
 
-          {formData.bannerType === "image" && (
-            <div>
-              <Label htmlFor="position">Position</Label>
-              <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select position" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
-                  <SelectItem value="category-banner">Category Banner</SelectItem>
-                  <SelectItem value="promotional">Promotional</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {formData.bannerType === "video" && (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Video Banner Settings</h4>
-              <p className="text-sm text-blue-700">
-                Video banners are automatically displayed in the Video Section on the homepage. 
-                Only one video banner can be active at a time.
-              </p>
-            </div>
-          )}
+          <div>
+            <Label htmlFor="position">Position</Label>
+            <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select position" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="homepage-hero">Homepage Hero</SelectItem>
+                <SelectItem value="category-banner">Category Banner</SelectItem>
+                <SelectItem value="promotional">Promotional</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div>
             <Label htmlFor="order">Display Order</Label>
