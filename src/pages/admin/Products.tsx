@@ -84,14 +84,15 @@ export default function Products() {
     // eslint-disable-next-line
   }, [currentPage, searchTerm, statusFilter, categoryFilter])
 
-  const getCategoryName = (categoryId: string) => {
-    if (typeof categoryId === 'object' && categoryId !== null) {
+  const getCategoryName = (categoryId: any) => {
+    if (categoryId && typeof categoryId === 'object') {
       return categoryId.name || 'Unknown Category';
     }
     if (!Array.isArray(categories)) {
       return 'Unknown Category';
     }
-    const category = categories.find(cat => cat.id === categoryId);
+    const idStr = String(categoryId || '');
+    const category = categories.find(cat => String(cat.id) === idStr);
     return category ? category.name : 'Unknown Category';
   };
 
@@ -261,6 +262,16 @@ export default function Products() {
                   />
                   {/* Status Badges */}
                   <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    {product.stock === 0 && (
+                      <Badge className="text-xs bg-red-100 text-red-800 border-red-200">
+                        Out of Stock
+                      </Badge>
+                    )}
+                    {product.stock > 0 && product.stock <= 5 && (
+                      <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200">
+                        Low Stock
+                      </Badge>
+                    )}
                     {product.featured && (
                       <Badge className="text-xs" variant="secondary">
                         <Star className="h-3 w-3 mr-1" />
@@ -365,6 +376,7 @@ export default function Products() {
                         <span>Stock:</span>
                         <span className={product.stock === 0 ? "text-destructive font-medium" : "font-medium"}>
                           {product.stock}
+                          {product.stock === 0 ? ' (Out of stock)' : (product.stock <= 5 ? ' (Low)' : '')}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -538,7 +550,15 @@ export default function Products() {
                     <h4 className="font-semibold text-lg mb-1">Details</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div><span className="font-medium">SKU:</span> {viewProduct.sku}</div>
-                      <div><span className="font-medium">Stock:</span> {viewProduct.stock} units</div>
+                      <div>
+                        <span className="font-medium">Stock:</span>{' '}
+                        {(() => {
+                          const variants: any[] = Array.isArray((viewProduct as any).variants) ? (viewProduct as any).variants : [];
+                          if (!variants.length) return `${viewProduct.stock} units`;
+                          const total = variants.reduce((sum, v) => sum + ((Array.isArray(v?.options) ? v.options : []).reduce((s: number, o: any) => s + (typeof o?.stock === 'number' ? Number(o.stock) : 0), 0)), 0);
+                          return `${total} units`;
+                        })()}
+                      </div>
                       <div><span className="font-medium">Category:</span> {getCategoryName(viewProduct.category as string)}</div>
                       {viewProduct.brand && <div><span className="font-medium">Brand:</span> {viewProduct.brand}</div>}
                       {viewProduct.material && <div><span className="font-medium">Material:</span> {viewProduct.material}</div>}
@@ -577,6 +597,45 @@ export default function Products() {
                         {viewProduct.tags.map((tag, index) => (
                           <Badge key={index} variant="secondary">{tag}</Badge>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Variants inventory overview */}
+                  {Array.isArray((viewProduct as any).variants) && (viewProduct as any).variants.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-lg mb-2">Variants (Color-wise Sizes & Stock)</h4>
+                      <div className="space-y-3">
+                        {(viewProduct as any).variants.map((v: any, vi: number) => {
+                          const colorName = v?.color?.name || v?.colorName || v?.color || `Variant ${vi+1}`;
+                          const options: any[] = Array.isArray(v?.options) ? v.options : [];
+                          return (
+                            <div key={vi} className="border rounded-md p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="font-medium">{String(colorName)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {v?.status?.isActive === false ? 'Inactive' : 'Active'}{v?.status?.isDefault ? ' • Default' : ''}
+                                </div>
+                              </div>
+                              {options.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {options.map((o: any, oi: number) => (
+                                    <Badge
+                                      key={oi}
+                                      variant={typeof o?.stock === 'number' ? (o.stock > 0 ? (o.stock <= 5 ? 'secondary' : 'outline') : 'destructive') : 'outline'}
+                                      className={`text-xs ${typeof o?.stock === 'number' && o.stock === 0 ? 'line-through' : ''}`}
+                                      title={typeof o?.stock === 'number' ? `${o.size || ''} • Stock: ${o.stock}` : `${o.size || ''}`}
+                                    >
+                                      {o.size || '-'}{typeof o?.stock === 'number' ? ` (${o.stock})` : ''}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">No sizes configured for this color</div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

@@ -21,7 +21,8 @@ const productSchema = z.object({
   description: z.string().min(1, "Description is required"),
   price: z.union([z.string(), z.number()]).transform(val => Number(val)).refine(val => val > 0, { message: "Price must be greater than 0" }),
   category: z.string().min(1, "Category is required"),
-  stock: z.union([z.string(), z.number()]).transform(val => Number(val)).refine(val => val >= 0, { message: "Stock must be 0 or greater" }),
+  stockManagement: z.enum(["global", "variant"]).default("global"),
+  stock: z.union([z.string(), z.number()]).optional().transform((val) => val === undefined ? undefined : Number(val)).refine((val) => val === undefined || val >= 0, { message: "Stock must be 0 or greater" }),
   sku: z.string().min(1, "SKU is required"),
   brand: z.string().optional(),
   material: z.string().optional(),
@@ -103,7 +104,8 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
       description: initialData?.description || "",
       price: initialData?.price || 0,
       category: initialData?.category?.id || initialData?.category || "",
-      stock: initialData?.stock || 0,
+      stockManagement: (Array.isArray(initialData?.variants) && initialData?.variants?.length > 0) ? "variant" : "global",
+      stock: initialData?.stock ?? 0,
       sku: initialData?.sku || "",
       brand: initialData?.brand || "",
       material: initialData?.material || "",
@@ -165,6 +167,19 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
     } catch {}
   }, [variants, form]);
 
+  // Auto-compute global stock from variant size stocks for display and submission
+  useEffect(() => {
+    try {
+      if (!variants || variants.length === 0) return;
+      const totalStock = variants.reduce((sum, v) => {
+        const opts = Array.isArray(v?.options) ? v.options : [];
+        const s = opts.reduce((sAcc, o) => sAcc + (typeof o?.stock === 'number' && !Number.isNaN(o.stock) ? Number(o.stock) : 0), 0);
+        return sum + s;
+      }, 0);
+      form.setValue('stock', totalStock);
+    } catch {}
+  }, [variants, form]);
+
   const onSubmit = async (data: ProductFormData) => {
     const formData = new FormData();
     
@@ -173,7 +188,22 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
     formData.append("description", data.description);
     formData.append("price", data.price.toString());
     formData.append("category", data.category);
-    formData.append("stock", data.stock.toString());
+    // If variants exist with explicit per-size stock values, compute global stock as sum
+    let computedVariantStock = 0;
+    try {
+      if (variants && variants.length) {
+        variants.forEach((v) => (v.options || []).forEach((o) => {
+          if (typeof o?.stock === 'number' && !Number.isNaN(o.stock)) {
+            computedVariantStock += Number(o.stock);
+          }
+        }));
+      }
+    } catch {}
+    const hasVariants = variants && variants.length > 0;
+    const stockManagement = hasVariants ? "variant" : "global";
+    const finalStock = stockManagement === "variant" ? computedVariantStock : Number(data.stock ?? 0);
+    formData.append("stockManagement", stockManagement);
+    formData.append("stock", String(finalStock));
     formData.append("sku", data.sku);
     formData.append("brand", data.brand || "");
     formData.append("material", data.material || "");
@@ -884,11 +914,11 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                             <div className="grid grid-cols-4 gap-3">
                               <div>
                                 <FormLabel>Base Price</FormLabel>
-                                <Input type="number" step="0.01" value={pricing.basePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { nv.pricing = { ...(nv.pricing || {}), basePrice: Number(e.target.value) }; return nv; })} />
+                                <Input inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={pricing.basePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { const v = e.target.value.replace(/[^0-9.]/g, ''); nv.pricing = { ...(nv.pricing || {}), basePrice: v === '' ? undefined : Number(v) }; return nv; })} />
                               </div>
                               <div>
                                 <FormLabel>Sale Price</FormLabel>
-                                <Input type="number" step="0.01" value={pricing.salePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { nv.pricing = { ...(nv.pricing || {}), salePrice: e.target.value === '' ? null : Number(e.target.value) }; return nv; })} />
+                                <Input inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={pricing.salePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { const v = e.target.value.replace(/[^0-9.]/g, ''); nv.pricing = { ...(nv.pricing || {}), salePrice: v === '' ? null : Number(v) }; return nv; })} />
                               </div>
                               <div>
                                 <FormLabel>Override Global Price</FormLabel>
@@ -929,8 +959,21 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                                   {v.options!.map((o, j) => (
                                     <div key={j} className="grid grid-cols-4 gap-3 items-center">
                                       <Input placeholder="Size (e.g. S)" value={o.size} onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], size: e.target.value }; return nv; })} />
-                                      <Input type="number" step="0.01" placeholder="Price" value={o.price} onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], price: Number(e.target.value) }; return nv; })} />
-                                      <Input type="number" placeholder="Stock" value={o.stock ?? ''} onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], stock: e.target.value === '' ? undefined : Number(e.target.value) }; return nv; })} />
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="Price"
+                                        value={o.price ?? ''}
+                                        onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], price: Math.max(0, Number(e.target.value || 0)) }; return nv; })}
+                                      />
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        placeholder="Stock"
+                                        value={o.stock ?? ''}
+                                        onChange={(e) => updateVariant(idx, (nv) => { const val = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)); nv.options![j] = { ...nv.options![j], stock: val as any }; return nv; })}
+                                      />
                                       <div className="flex justify-end">
                                         <Button type="button" variant="destructive" size="icon" onClick={() => removeVariantSizeRow(idx, j)}>
                                           <Trash2 className="h-4 w-4" />
@@ -989,8 +1032,20 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                           <FormItem>
                             <FormLabel>Discount (%)</FormLabel>
                             <FormControl>
-                              <Input type="number" min="0" max="100" placeholder="0" {...field} />
+                              <Input type="number" min="0" max="100" placeholder="0" {...field} onChange={(e) => {
+                                const val = Math.max(0, Math.min(100, Number(e.target.value || 0)));
+                                field.onChange(val);
+                              }} />
                             </FormControl>
+                            <div className="text-xs text-muted-foreground">
+                              Selling preview: ₹{(() => {
+                                const price = Number(form.watch('price') || 0);
+                                const pct = Number(form.watch('discountPercent') || 0);
+                                if (!(price > 0)) return '0.00';
+                                const final = price * (1 - pct / 100);
+                                return final.toFixed(2);
+                              })()}
+                              </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1003,8 +1058,11 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                           <FormItem>
                             <FormLabel>Stock Quantity</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="0" {...field} />
+                              <Input type="number" placeholder="0" {...field} disabled={variants.length > 0} />
                             </FormControl>
+                            {variants.length > 0 && (
+                              <p className="text-xs text-muted-foreground">Stock will be auto-calculated from variant sizes.</p>
+                            )}
                             <FormMessage />
                           </FormItem>
                         )}
