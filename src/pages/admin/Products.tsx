@@ -165,12 +165,12 @@ export default function Products() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Product Management</h1>
-            <p className="text-muted-foreground">Manage your product inventory</p>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Product Management</h1>
+            <p className="text-muted-foreground text-sm lg:text-base">Manage your product inventory</p>
           </div>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
@@ -199,7 +199,7 @@ export default function Products() {
                 </div>
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <Package className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
@@ -215,7 +215,7 @@ export default function Products() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -236,7 +236,7 @@ export default function Products() {
         </Card>
 
         {/* Product Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {loading ? (
             <Card><CardContent className="py-12 text-center">Loading products...</CardContent></Card>
           ) : error ? (

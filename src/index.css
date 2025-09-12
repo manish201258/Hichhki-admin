@@ -112,3 +112,23 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Mobile-specific utilities */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  .mobile-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Ensure proper touch targets on mobile */
+  @media (max-width: 768px) {
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}

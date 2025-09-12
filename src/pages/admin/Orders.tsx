@@ -460,26 +460,28 @@ export default function Orders() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-6 bg-gradient-to-b from-[#f7f5ef] to-white min-h-screen">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-gradient-to-b from-[#f7f5ef] to-white min-h-screen">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Orders Management</h1>
-            <p className="text-muted-foreground">Monitor and manage all customer orders with industry-standard status tracking.</p>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Orders Management</h1>
+            <p className="text-muted-foreground text-sm lg:text-base">Monitor and manage all customer orders with industry-standard status tracking.</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>Last updated: {formatDate(new Date())}</span>
+              <span className="hidden sm:inline">Last updated: {formatDate(new Date())}</span>
+              <span className="sm:hidden">{formatDate(new Date())}</span>
             </div>
             <Button variant="ghost" size="sm" onClick={() => { fetchOrders(); fetchStats(); }} className="text-[#B8956A] hover:text-[#B8956A]/80">
-              <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+              <RefreshCw className="h-4 w-4 mr-1" /> 
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>

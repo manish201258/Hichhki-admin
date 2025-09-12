@@ -92,36 +92,43 @@ export default function Dashboard() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground text-sm lg:text-base">
               Welcome back, {user?.name}! Here's what's happening with your store.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>Last updated: {new Date().toLocaleDateString()}</span>
-            <Button
-              onClick={handleDashboardRefresh}
-              disabled={loadingRefresh}
-              title="Refresh"
-              className="flex items-center gap-2 bg-[#f7f5ef] text-[#B8956A] border border-[#B8956A]/30 rounded-lg px-4 py-2 hover:bg-[#f7f5ef]/80 transition"
-            >
-              <RefreshCw className={loadingRefresh ? "animate-spin h-5 w-5" : "h-5 w-5"} />
-              Refresh
-            </Button>
-            <Button
-              onClick={logout}
-              variant="outline"
-              title="Logout"
-              className="flex items-center gap-2 border-red-200 text-red-600 hover:bg-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Last updated: {new Date().toLocaleDateString()}</span>
+              <span className="sm:hidden">{new Date().toLocaleDateString()}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleDashboardRefresh}
+                disabled={loadingRefresh}
+                title="Refresh"
+                size="sm"
+                className="flex items-center gap-2 bg-[#f7f5ef] text-[#B8956A] border border-[#B8956A]/30 rounded-lg px-3 py-1.5 hover:bg-[#f7f5ef]/80 transition text-xs lg:text-sm"
+              >
+                <RefreshCw className={loadingRefresh ? "animate-spin h-4 w-4" : "h-4 w-4"} />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+              <Button
+                onClick={logout}
+                variant="outline"
+                title="Logout"
+                size="sm"
+                className="flex items-center gap-2 border-red-200 text-red-600 hover:bg-red-50 text-xs lg:text-sm px-3 py-1.5"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -159,28 +166,28 @@ export default function Dashboard() {
                           </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                           <div className="flex items-center gap-2 text-muted-foreground">
-                            <User className="h-4 w-4" />
-                            <div>
-                              <div className="font-medium text-foreground">{getUserName(order.userId)}</div>
+                            <User className="h-4 w-4 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-medium text-foreground truncate">{getUserName(order.userId)}</div>
                               {getUserEmail(order.userId) && (
-                                <div className="text-xs">{getUserEmail(order.userId)}</div>
+                                <div className="text-xs truncate">{getUserEmail(order.userId)}</div>
                               )}
                             </div>
                           </div>
                           
                           <div className="flex items-center gap-2 text-muted-foreground">
-                            <MapPin className="h-4 w-4" />
-                            <div>
-                              <div className="font-medium text-foreground">{order.address?.city}, {order.address?.state}</div>
-                              <div className="text-xs">{order.address?.line1}</div>
+                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-medium text-foreground truncate">{order.address?.city}, {order.address?.state}</div>
+                              <div className="text-xs truncate">{order.address?.line1}</div>
                             </div>
                           </div>
                           
                           <div className="flex items-center gap-2 text-muted-foreground">
-                            <Clock className="h-4 w-4" />
-                            <div>
+                            <Clock className="h-4 w-4 flex-shrink-0" />
+                            <div className="min-w-0">
                               <div className="font-medium text-foreground">₹{order.amounts?.total?.toLocaleString() || 0}</div>
                               <div className="text-xs">{new Date(order.createdAt).toLocaleDateString()}</div>
                             </div>
@@ -224,18 +231,18 @@ export default function Dashboard() {
             <CardTitle className="text-lg">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-3">
-              <Button className="flex items-center gap-2" onClick={() => navigate('/admin/products', { state: { openForm: true } })}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <Button className="flex items-center gap-2 justify-start" onClick={() => navigate('/admin/products', { state: { openForm: true } })}>
                 <TrendingUp className="h-4 w-4" />
-                Add New Product
+                <span className="text-sm">Add New Product</span>
               </Button>
-              <Button variant="outline" className="flex items-center gap-2" onClick={() => navigate('/admin/categories', { state: { openForm: true } })}>
+              <Button variant="outline" className="flex items-center gap-2 justify-start" onClick={() => navigate('/admin/categories', { state: { openForm: true } })}>
                 <TrendingUp className="h-4 w-4" />
-                Add New Category
+                <span className="text-sm">Add New Category</span>
               </Button>
-              <Button variant="outline" className="flex items-center gap-2" onClick={() => navigate('/admin/analytics')}>
+              <Button variant="outline" className="flex items-center gap-2 justify-start sm:col-span-2 lg:col-span-1" onClick={() => navigate('/admin/analytics')}>
                 <Eye className="h-4 w-4" />
-                View Analytics
+                <span className="text-sm">View Analytics</span>
               </Button>
             </div>
           </CardContent>
