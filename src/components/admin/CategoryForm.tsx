@@ -124,11 +124,9 @@ export function CategoryForm({
 
   const uploadImage = async (file: File): Promise<string> => {
     const response = await adminApiClient.uploadImage(file);
-    
     if (!response.ok) {
       throw new Error(response.error?.message || 'Failed to upload image');
     }
-    
     return response.data.url;
   };
 
@@ -188,25 +186,27 @@ export function CategoryForm({
       
       // Handle image uploads
       if (imageFile) {
+        // Backend expects file under `images`
         formDataToSend.append('images', imageFile);
       } else if (formData.image) {
+        // URL path case
         formDataToSend.append('image', formData.image);
       } else if (category && !hasExistingImage) {
-        // If updating and no image provided, send empty string to remove image
+        // Removing image
         formDataToSend.append('image', '');
       }
-      
+
       if (bannerImageFile) {
+        // Backend expects banner file under `lookImage`
         formDataToSend.append('lookImage', bannerImageFile);
       } else if (formData.bannerImage) {
         formDataToSend.append('bannerImage', formData.bannerImage);
       } else if (category && !hasExistingBannerImage) {
-        // If updating and no banner image provided, send empty string to remove image
         formDataToSend.append('bannerImage', '');
       }
       
       if (category) {
-        // Update existing category
+        // Update existing category (PUT with FormData)
         const response = await adminApiClient.updateCategory(category.id, formDataToSend);
         if (response.ok) {
           toast.success("Category updated successfully!");

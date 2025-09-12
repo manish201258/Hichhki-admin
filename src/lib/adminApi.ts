@@ -283,7 +283,8 @@ class AdminApiClient {
         ...options.headers,
       },
       mode: 'cors',
-      credentials: 'include',
+      // Do not send cookies; we use Authorization Bearer tokens
+      credentials: 'omit',
       ...options,
     };
 
@@ -436,17 +437,21 @@ class AdminApiClient {
     return this.request<{ category: Category }>(`/categories/${id}`);
   }
 
-  async createCategory(categoryData: Partial<Category>): Promise<ApiResponse<{ category: Category }>> {
+  async createCategory(categoryData: FormData | Partial<Category>): Promise<ApiResponse<{ category: Category }>> {
+    const isFormData = categoryData instanceof FormData;
     return this.request<{ category: Category }>('/categories', {
       method: 'POST',
-      body: JSON.stringify(categoryData),
+      body: isFormData ? categoryData : JSON.stringify(categoryData),
+      headers: isFormData ? {} : { 'Content-Type': 'application/json' },
     });
   }
 
-  async updateCategory(id: string, categoryData: Partial<Category>): Promise<ApiResponse<{ category: Category }>> {
+  async updateCategory(id: string, categoryData: FormData | Partial<Category>): Promise<ApiResponse<{ category: Category }>> {
+    const isFormData = categoryData instanceof FormData;
     return this.request<{ category: Category }>(`/categories/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(categoryData),
+      method: isFormData ? 'PUT' : 'PATCH',
+      body: isFormData ? categoryData : JSON.stringify(categoryData),
+      headers: isFormData ? {} : { 'Content-Type': 'application/json' },
     });
   }
 

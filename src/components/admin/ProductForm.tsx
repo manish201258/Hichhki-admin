@@ -222,13 +222,44 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
     formData.append("colors", JSON.stringify(data.colors));
     formData.append("tags", JSON.stringify(data.tags));
     if (variants && variants.length) {
-      // Normalize default variant (ensure only one default)
-      const normalized = variants.map((v, i) => ({
-        ...v,
-        status: { ...(v.status || {}), isDefault: false }
-      }));
+      // Normalize default flag and image URL shapes to server paths
+      const toServerPath = (u?: string) => {
+        if (!u) return u;
+        try {
+          if (u.startsWith(BACKEND_ORIGIN)) {
+            const path = u.substring(BACKEND_ORIGIN.length);
+            return path.startsWith('/') ? path : `/${path}`;
+          }
+          if (u.startsWith('http://localhost') || u.startsWith('http://127.0.0.1') || u.startsWith('https://localhost') || u.startsWith('https://127.0.0.1')) {
+            const { pathname } = new URL(u);
+            const p = pathname.startsWith('/uploads') ? pathname : `/uploads${pathname}`;
+            return p;
+          }
+        } catch {}
+        return u;
+      };
+
+      const mapImageArray = (arr?: string[]) => Array.isArray(arr) ? arr.map(toServerPath).filter(Boolean) as string[] : arr;
+
+      const normalized = variants.map((v, i) => {
+        const images = Array.isArray(v.images)
+          ? { main: mapImageArray(v.images as unknown as string[]) }
+          : {
+              main: mapImageArray((v.images as any)?.main),
+              lifestyle: mapImageArray((v.images as any)?.lifestyle),
+              detail: mapImageArray((v.images as any)?.detail),
+              thumbnail: toServerPath((v.images as any)?.thumbnail),
+            };
+        return {
+          ...v,
+          images,
+          status: { ...(v.status || {}), isDefault: false },
+        };
+      });
+
       const defaultIndex = variants.findIndex(v => v.status?.isDefault);
       if (defaultIndex >= 0) normalized[defaultIndex].status!.isDefault = true; else normalized[0].status!.isDefault = true;
+
       formData.append("variants", JSON.stringify(normalized));
     }
 
