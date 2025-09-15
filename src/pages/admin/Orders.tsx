@@ -35,7 +35,6 @@ const ORDER_STATUSES = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',
   PROCESSING: 'processing',
-  READY_TO_SHIP: 'ready_to_ship',
   SHIPPED: 'shipped',
   OUT_FOR_DELIVERY: 'out_for_delivery',
   DELIVERED: 'delivered',
@@ -188,7 +187,6 @@ export default function Orders() {
       case 'out_for_delivery':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'processing':
-      case 'ready_to_ship':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'confirmed':
         return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -248,6 +246,16 @@ export default function Orders() {
     return status.split('_').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+  };
+
+  // Display-friendly status using full order context
+  const formatOrderStatus = (order: Order) => {
+    const raw = String(order.status || '').toLowerCase();
+    if (raw === 'refunded') return 'Returned';
+    if (raw === 'returned' && !(order as any).cancellation?.processedAt && order.payment?.status !== 'refunded') {
+      return 'Return Processing';
+    }
+    return formatStatus(raw);
   };
 
   const handleView = (order: Order) => {
@@ -617,7 +625,7 @@ export default function Orders() {
                           <Badge className={`px-2 py-1 text-xs font-medium border ${getStatusColor(order.status)}`}>
                             <div className="flex items-center gap-1">
                               {getStatusIcon(order.status)}
-                              {formatStatus(order.status)}
+                              {formatOrderStatus(order)}
                             </div>
                           </Badge>
                         </td>
@@ -914,11 +922,13 @@ export default function Orders() {
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(ORDER_STATUSES).map(([key, value]) => (
-                      <SelectItem key={value} value={value}>
-                        {formatStatus(value)}
-                      </SelectItem>
-                    ))}
+                    {Object.entries(ORDER_STATUSES)
+                      .filter(([k, v]) => v !== 'refunded')
+                      .map(([key, value]) => (
+                        <SelectItem key={value} value={value}>
+                          {formatStatus(value)}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

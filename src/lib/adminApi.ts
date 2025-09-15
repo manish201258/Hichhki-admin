@@ -83,7 +83,7 @@ interface Order {
   _id?: string;
   orderNo: string;
   userId: string | { id: string; name: string; email: string };
-  status: 'pending' | 'confirmed' | 'processing' | 'ready_to_ship' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned' | 'refunded';
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned' | 'refunded';
   items: Array<{
     productId: string;
     title: string;
@@ -635,6 +635,7 @@ class AdminApiClient {
       method: 'DELETE',
     });
   }
+
 
   // Image Upload
   async uploadImage(file: File): Promise<ApiResponse<{ url: string; filename: string; originalName: string; size: number }>> {
