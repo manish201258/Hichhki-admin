@@ -15,13 +15,12 @@ import { Upload, Save, X, Plus, Trash2, ArrowLeft, Tag } from "lucide-react"
 import { useAuth } from "@/context/AuthContext";
 import { adminApiClient, BACKEND_ORIGIN } from "@/lib/adminApi"
 
-// Updated product schema to match backend
+// Updated product schema to match backend (single product, no variants)
 const productSchema = z.object({
   name: z.string().min(1, "Product name is required"),
   description: z.string().min(1, "Description is required"),
   price: z.union([z.string(), z.number()]).transform(val => Number(val)).refine(val => val > 0, { message: "Price must be greater than 0" }),
   category: z.string().min(1, "Category is required"),
-  stockManagement: z.enum(["global", "variant"]).default("global"),
   stock: z.union([z.string(), z.number()]).optional().transform((val) => val === undefined ? undefined : Number(val)).refine((val) => val === undefined || val >= 0, { message: "Stock must be 0 or greater" }),
   sku: z.string().min(1, "SKU is required"),
   brand: z.string().optional(),
@@ -31,7 +30,6 @@ const productSchema = z.object({
   neckline: z.string().optional(),
   discountPercent: z.union([z.string(), z.number()]).transform(val => Number(val)).refine(val => val >= 0 && val <= 100, { message: "Discount must be between 0 and 100" }).default(0),
   sizes: z.array(z.string()).default([]),
-  colors: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   featured: z.boolean().default(false),
   isNewArrival: z.boolean().default(false),
@@ -57,14 +55,7 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
   const [newTag, setNewTag] = useState("")
   const [newSize, setNewSize] = useState("")
   const [newColor, setNewColor] = useState("")
-  // Color Variants state
-  const [variants, setVariants] = useState<Array<{
-    color: { name: string; hex?: string; displayName?: string } | string;
-    pricing?: { basePrice?: number; salePrice?: number | null; priceOverride?: boolean };
-    images?: { main?: string[]; lifestyle?: string[]; detail?: string[]; thumbnail?: string } | string[];
-    options?: Array<{ size: string; price: number; stock?: number; sku?: string }>;
-    status?: { isDefault?: boolean; isActive?: boolean; isFeatured?: boolean };
-  }>>([])
+  const [sizeStocks, setSizeStocks] = useState<Record<string, { stock: number; restockThreshold?: number; restockDate?: string }>>({})
   const { toast } = useToast()
   const { user } = useAuth();
 
@@ -85,8 +76,12 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
         const response = await adminApiClient.listCategories();
         
         if (response.ok && response.data) {
-          // Backend returns categories in response.data.categories
-          setCategories(response.data.categories || []);
+          // Normalize to { id, name }
+          const raw = response.data.categories || [];
+          const normalized = Array.isArray(raw)
+            ? raw.map((c: any) => ({ id: String(c._id || c.id || c), name: c.name || c.title || c.slug || String(c._id || c.id || c) }))
+            : [];
+          setCategories(normalized);
         }
       } catch (err) {
         toast({ title: "Error", description: "Failed to fetch categories.", variant: "destructive" });
@@ -103,8 +98,8 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
       name: initialData?.name || "",
       description: initialData?.description || "",
       price: initialData?.price || 0,
-      category: initialData?.category?.id || initialData?.category || "",
-      stockManagement: (Array.isArray(initialData?.variants) && initialData?.variants?.length > 0) ? "variant" : "global",
+      category: (initialData?.category?._id || initialData?.category?.id || (typeof initialData?.category === 'string' ? initialData.category : "")) as any,
+      
       stock: initialData?.stock ?? 0,
       sku: initialData?.sku || "",
       brand: initialData?.brand || "",
@@ -136,49 +131,27 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
       if (initialData.lifestyleImage) {
         setLifestyleImage(getImageUrl(initialData.lifestyleImage));
       }
-      if (Array.isArray(initialData.variants)) {
-        try {
-          setVariants(initialData.variants.map((v: any) => ({
-            color: v.color?.name ? v.color : (v.colorName ? { name: v.colorName } : (typeof v.color === 'string' ? { name: v.color } : { name: '' })),
-            pricing: v.pricing || { basePrice: undefined, salePrice: null, priceOverride: false },
-            images: Array.isArray(v.images) ? { main: v.images } : (v.images || { main: [], lifestyle: [], detail: [], thumbnail: '' }),
-            options: Array.isArray(v.options) ? v.options.map((o: any) => ({ size: String(o.size || ''), price: Number(o.price || 0), stock: o.stock != null ? Number(o.stock) : undefined, sku: o.sku })) : [],
-            status: v.status || { isDefault: false, isActive: true, isFeatured: false },
-          })))
-        } catch {}
-      }
+      try {
+        const bySize: Record<string, { stock: number; restockThreshold?: number; restockDate?: string }> = {}
+        if (Array.isArray((initialData as any)?.sizeStocks)) {
+          (initialData as any).sizeStocks.forEach((s: any) => {
+            if (s?.size) bySize[String(s.size)] = { stock: Number(s.stock || 0), restockThreshold: s.restockThreshold != null ? Number(s.restockThreshold) : undefined, restockDate: s.restockDate || undefined }
+          })
+        } else if (Array.isArray((initialData as any)?.sizes)) {
+          (initialData as any).sizes.forEach((s: any) => { bySize[String(s)] = { stock: 0 } })
+        }
+        setSizeStocks(bySize)
+      } catch {}
     }
   }, [initialData]);
 
-  // Auto-sync global sizes/colors from variants to keep legacy fields consistent
+  // Keep sizes and stock in sync with sizeStocks
   useEffect(() => {
-    try {
-      if (variants && variants.length > 0) {
-        const colors = Array.from(new Set(
-          variants
-            .map(v => (typeof v.color === 'string' ? v.color : (v.color?.name || '')))
-            .filter(Boolean)
-        ));
-        const sizesSet = new Set<string>();
-        variants.forEach(v => (v.options || []).forEach(o => { if (o.size) sizesSet.add(String(o.size)); }));
-        form.setValue('colors', colors);
-        form.setValue('sizes', Array.from(sizesSet));
-      }
-    } catch {}
-  }, [variants, form]);
-
-  // Auto-compute global stock from variant size stocks for display and submission
-  useEffect(() => {
-    try {
-      if (!variants || variants.length === 0) return;
-      const totalStock = variants.reduce((sum, v) => {
-        const opts = Array.isArray(v?.options) ? v.options : [];
-        const s = opts.reduce((sAcc, o) => sAcc + (typeof o?.stock === 'number' && !Number.isNaN(o.stock) ? Number(o.stock) : 0), 0);
-        return sum + s;
-      }, 0);
-      form.setValue('stock', totalStock);
-    } catch {}
-  }, [variants, form]);
+    const sizes = Object.keys(sizeStocks || {});
+    form.setValue('sizes', sizes);
+    const total = sizes.reduce((acc, s) => acc + (Number(sizeStocks[s]?.stock || 0)), 0);
+    form.setValue('stock', total);
+  }, [sizeStocks, form]);
 
   const onSubmit = async (data: ProductFormData) => {
     const formData = new FormData();
@@ -199,10 +172,9 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
         }));
       }
     } catch {}
-    const hasVariants = variants && variants.length > 0;
-    const stockManagement = hasVariants ? "variant" : "global";
-    const finalStock = stockManagement === "variant" ? computedVariantStock : Number(data.stock ?? 0);
-    formData.append("stockManagement", stockManagement);
+    const hasVariants = false;
+    const stockManagement = "global";
+    const finalStock = Number(data.stock ?? 0);
     formData.append("stock", String(finalStock));
     formData.append("sku", data.sku);
     formData.append("brand", data.brand || "");
@@ -217,51 +189,17 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
     formData.append("isTrending", data.isTrending.toString());
     formData.append("active", data.active.toString());
     
-    // Arrays (sizes/colors kept in sync from variants when present)
+    // Arrays
     formData.append("sizes", JSON.stringify(data.sizes));
-    formData.append("colors", JSON.stringify(data.colors));
     formData.append("tags", JSON.stringify(data.tags));
-    if (variants && variants.length) {
-      // Normalize default flag and image URL shapes to server paths
-      const toServerPath = (u?: string) => {
-        if (!u) return u;
-        try {
-          if (u.startsWith(BACKEND_ORIGIN)) {
-            const path = u.substring(BACKEND_ORIGIN.length);
-            return path.startsWith('/') ? path : `/${path}`;
-          }
-          if (u.startsWith('http://localhost') || u.startsWith('http://127.0.0.1') || u.startsWith('https://localhost') || u.startsWith('https://127.0.0.1')) {
-            const { pathname } = new URL(u);
-            const p = pathname.startsWith('/uploads') ? pathname : `/uploads${pathname}`;
-            return p;
-          }
-        } catch {}
-        return u;
-      };
-
-      const mapImageArray = (arr?: string[]) => Array.isArray(arr) ? arr.map(toServerPath).filter(Boolean) as string[] : arr;
-
-      const normalized = variants.map((v, i) => {
-        const images = Array.isArray(v.images)
-          ? { main: mapImageArray(v.images as unknown as string[]) }
-          : {
-              main: mapImageArray((v.images as any)?.main),
-              lifestyle: mapImageArray((v.images as any)?.lifestyle),
-              detail: mapImageArray((v.images as any)?.detail),
-              thumbnail: toServerPath((v.images as any)?.thumbnail),
-            };
-        return {
-          ...v,
-          images,
-          status: { ...(v.status || {}), isDefault: false },
-        };
-      });
-
-      const defaultIndex = variants.findIndex(v => v.status?.isDefault);
-      if (defaultIndex >= 0) normalized[defaultIndex].status!.isDefault = true; else normalized[0].status!.isDefault = true;
-
-      formData.append("variants", JSON.stringify(normalized));
-    }
+    // Size-level inventory payload
+    const sizeStocksArray = Object.keys(sizeStocks || {}).map((k) => ({
+      size: k,
+      stock: Number(sizeStocks[k]?.stock || 0),
+      restockThreshold: sizeStocks[k]?.restockThreshold != null ? Number(sizeStocks[k]?.restockThreshold) : undefined,
+      restockDate: sizeStocks[k]?.restockDate || undefined,
+    }));
+    formData.append("sizeStocks", JSON.stringify(sizeStocksArray));
 
     // Global images: send current kept images as imagesJson so deletions persist
     try {
@@ -864,11 +802,11 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                     </CardContent>
                   </Card>
 
-                  {/* Attributes (Tags only - colors/sizes managed in Variants) */}
+                  {/* Attributes */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Attributes</CardTitle>
-                      <p className="text-sm text-muted-foreground">Global product attributes. Colors and sizes are managed in the Variants section.</p>
+                      <p className="text-sm text-muted-foreground">Global product attributes. Manage sizes below; stock is handled per-size.</p>
                     </CardHeader>
                     <CardContent className="space-y-6">
                       {/* Tags */}
@@ -897,139 +835,54 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                         </div>
                       </div>
 
-                      {/* Sizes and Colors removed; managed in Variants */}
+                      {/* Sizes */}
+                      <div>
+                        <h4 className="font-medium mb-3">Sizes</h4>
+                        <div className="flex gap-2 mb-3">
+                          <Input
+                            placeholder="Add size or multiple sizes separated by commas..."
+                            value={newSize}
+                            onChange={(e) => setNewSize(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSize())}
+                          />
+                          <Button type="button" onClick={addSize} size="sm">
+                            Add Single
+                          </Button>
+                          <Button type="button" onClick={addMultipleSizes} size="sm" variant="outline">
+                            Add Multiple
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {form.watch("sizes")?.map((size, index) => (
+                            <Badge key={index} variant="secondary" className="cursor-pointer hover:bg-red-100" onClick={() => { removeSize(size); setSizeStocks((prev) => { const n = { ...prev } as any; delete n[size]; return n; }); }}>
+                              {size} <X className="h-3 w-3 ml-1" />
+                            </Badge>
+                          )) || []}
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
-                  {/* Color Variants */}
+                  {/* Size-wise Inventory */}
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Color Variants</CardTitle>
-                      <p className="text-sm text-muted-foreground">Manage per-color images, pricing and sizes. If variants exist, they override global settings.</p>
+                      <CardTitle className="text-lg">Size-wise Inventory</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                      <div className="flex justify-end">
-                        <Button type="button" variant="outline" size="sm" onClick={addVariant}>
-                          <Plus className="h-4 w-4 mr-2" /> Add Variant
-                        </Button>
-                      </div>
-
-                      {variants.map((v, idx) => {
-                        const colorObj = typeof v.color === 'string' ? { name: v.color } : (v.color || { name: '' });
-                        const pricing = v.pricing || {};
-                        const imgs = Array.isArray(v.images) ? { main: v.images } : (v.images || { main: [], lifestyle: [], detail: [], thumbnail: '' });
-                        const availableSizes = form.watch('sizes') || [];
-                        return (
-                          <div key={idx} className="border rounded-md p-4 space-y-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="grid grid-cols-3 gap-3 flex-1">
-                                <div>
-                                  <FormLabel>Color Name</FormLabel>
-                                  <Input value={colorObj.name} onChange={(e) => updateVariant(idx, (nv) => { nv.color = { ...(typeof nv.color === 'string' ? { name: nv.color } : (nv.color || {})), name: e.target.value }; return nv; })} placeholder="e.g. Red" />
-                                </div>
-                                <div>
-                                  <FormLabel>Hex</FormLabel>
-                                  <Input value={colorObj.hex || ''} onChange={(e) => updateVariant(idx, (nv) => { nv.color = { ...(typeof nv.color === 'string' ? { name: nv.color } : (nv.color || {})), hex: e.target.value }; return nv; })} placeholder="#ff0000" />
-                                </div>
-                                <div>
-                                  <FormLabel>Display Name</FormLabel>
-                                  <Input value={colorObj.displayName || ''} onChange={(e) => updateVariant(idx, (nv) => { nv.color = { ...(typeof nv.color === 'string' ? { name: nv.color } : (nv.color || {})), displayName: e.target.value }; return nv; })} placeholder="Red Shimmer" />
-                                </div>
-                              </div>
-                              <Button type="button" variant="destructive" size="icon" onClick={() => removeVariant(idx)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                      {(form.watch('sizes') || []).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Add sizes in Attributes to manage stock.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {(form.watch('sizes') || []).map((s) => (
+                            <div key={s} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+                              <div className="text-sm font-medium">{s}</div>
+                              <Input type="number" min="0" placeholder="Stock" value={sizeStocks[s]?.stock ?? 0} onChange={(e) => setSizeStocks((prev) => ({ ...prev, [s]: { ...(prev[s] || { stock: 0 }), stock: Math.max(0, Number(e.target.value || 0)) } }))} />
+                              <Input type="number" min="0" placeholder="Restock threshold (optional)" value={sizeStocks[s]?.restockThreshold ?? ''} onChange={(e) => setSizeStocks((prev) => ({ ...prev, [s]: { ...(prev[s] || { stock: 0 }), restockThreshold: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) } }))} />
+                              <Input type="date" placeholder="Restock date (optional)" value={sizeStocks[s]?.restockDate ?? ''} onChange={(e) => setSizeStocks((prev) => ({ ...prev, [s]: { ...(prev[s] || { stock: 0 }), restockDate: e.target.value || undefined } }))} />
                             </div>
-
-                            {/* Pricing */}
-                            <div className="grid grid-cols-4 gap-3">
-                              <div>
-                                <FormLabel>Base Price</FormLabel>
-                                <Input inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={pricing.basePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { const v = e.target.value.replace(/[^0-9.]/g, ''); nv.pricing = { ...(nv.pricing || {}), basePrice: v === '' ? undefined : Number(v) }; return nv; })} />
-                              </div>
-                              <div>
-                                <FormLabel>Sale Price</FormLabel>
-                                <Input inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={pricing.salePrice ?? ''} onChange={(e) => updateVariant(idx, (nv) => { const v = e.target.value.replace(/[^0-9.]/g, ''); nv.pricing = { ...(nv.pricing || {}), salePrice: v === '' ? null : Number(v) }; return nv; })} />
-                              </div>
-                              <div>
-                                <FormLabel>Override Global Price</FormLabel>
-                                <div className="flex items-center h-10">
-                                  <Checkbox checked={!!pricing.priceOverride} onCheckedChange={(val) => updateVariant(idx, (nv) => { nv.pricing = { ...(nv.pricing || {}), priceOverride: Boolean(val) }; return nv; })} />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Images (main) */}
-                            <div className="space-y-2">
-                              <FormLabel>Images (Main)</FormLabel>
-                              {imgs.main && imgs.main.length > 0 && (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                  {imgs.main.map((img: string, i: number) => (
-                                    <div key={i} className="relative group">
-                                      <img src={getImageUrl(img)} alt="Variant" className="w-full h-20 object-cover rounded" />
-                                      <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => removeVariantImageAt(idx, 'main', i)}>
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <Input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) addVariantImage(idx, 'main', f); }} />
-                            </div>
-
-                            {/* Size/Stock Matrix */}
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <FormLabel>Sizes</FormLabel>
-                                <Button type="button" size="sm" variant="outline" onClick={() => addVariantSizeRow(idx)}>
-                                  <Plus className="h-4 w-4 mr-2" /> Add Size
-                                </Button>
-                              </div>
-                              {(v.options && v.options.length > 0) ? (
-                                <div className="space-y-2">
-                                  {v.options!.map((o, j) => (
-                                    <div key={j} className="grid grid-cols-4 gap-3 items-center">
-                                      <Input placeholder="Size (e.g. S)" value={o.size} onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], size: e.target.value }; return nv; })} />
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        placeholder="Price"
-                                        value={o.price ?? ''}
-                                        onChange={(e) => updateVariant(idx, (nv) => { nv.options![j] = { ...nv.options![j], price: Math.max(0, Number(e.target.value || 0)) }; return nv; })}
-                                      />
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        placeholder="Stock"
-                                        value={o.stock ?? ''}
-                                        onChange={(e) => updateVariant(idx, (nv) => { const val = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)); nv.options![j] = { ...nv.options![j], stock: val as any }; return nv; })}
-                                      />
-                                      <div className="flex justify-end">
-                                        <Button type="button" variant="destructive" size="icon" onClick={() => removeVariantSizeRow(idx, j)}>
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No sizes added. Use "Add Size" to define per-size pricing/stock.</p>
-                              )}
-                              {availableSizes.length > 0 && (
-                                <p className="text-xs text-muted-foreground">Tip: Base sizes in this product: {availableSizes.join(', ')}</p>
-                              )}
-                            </div>
-
-                            {/* Status */}
-                            <div className="flex items-center gap-4">
-                              <label className="flex items-center gap-2 text-sm"><Checkbox checked={!!v.status?.isDefault} onCheckedChange={(val) => updateVariant(idx, (nv) => { nv.status = { ...(nv.status || {}), isDefault: Boolean(val) }; return nv; })} /> Default</label>
-                              <label className="flex items-center gap-2 text-sm"><Checkbox checked={v.status?.isActive !== false} onCheckedChange={(val) => updateVariant(idx, (nv) => { nv.status = { ...(nv.status || {}), isActive: Boolean(val) }; return nv; })} /> Active</label>
-                              <label className="flex items-center gap-2 text-sm"><Checkbox checked={!!v.status?.isFeatured} onCheckedChange={(val) => updateVariant(idx, (nv) => { nv.status = { ...(nv.status || {}), isFeatured: Boolean(val) }; return nv; })} /> Featured</label>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -1089,11 +942,9 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                           <FormItem>
                             <FormLabel>Stock Quantity</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="0" {...field} disabled={variants.length > 0} />
+                              <Input type="number" placeholder="0" {...field} disabled={true} />
                             </FormControl>
-                            {variants.length > 0 && (
-                              <p className="text-xs text-muted-foreground">Stock will be auto-calculated from variant sizes.</p>
-                            )}
+                            <p className="text-xs text-muted-foreground">Stock is auto-calculated from size-wise inventory.</p>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1122,7 +973,7 @@ export function ProductForm({ onCancel, initialData }: ProductFormProps) {
                               <SelectContent>
                                 {categories.length > 0 ? (
                                   categories.map((cat) => (
-                                    <SelectItem key={cat.id} value={cat.id}>
+                                    <SelectItem key={String(cat.id)} value={String(cat.id)}>
                                       {cat.name}
                                     </SelectItem>
                                   ))
